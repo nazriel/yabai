@@ -578,9 +578,20 @@ static EVENT_HANDLER(WINDOW_CREATED)
 
     if (window_check_rule_flag(window, WINDOW_RULE_TAB)) {
         struct window *tab_parent = window_manager_find_tab_parent(&g_window_manager, window);
+        if (!tab_parent && window_is_standard(window)) {
+            tab_parent = window_manager_find_managed_sibling(&g_window_manager, window);
+            if (tab_parent) {
+                debug("%s: tab assumed for %s %d (managed sibling %d, frame mismatch — resizing to match)\n", __FUNCTION__, window->application->name, window->id, tab_parent->id);
+                window_manager_set_window_frame(window, tab_parent->frame.origin.x, tab_parent->frame.origin.y, tab_parent->frame.size.width, tab_parent->frame.size.height);
+            }
+        }
         if (tab_parent) {
             debug("%s: tab detected for %s %d (parent %d)\n", __FUNCTION__, window->application->name, window->id, tab_parent->id);
             window_set_flag(window, WINDOW_TAB);
+            if (!window_check_rule_flag(tab_parent, WINDOW_RULE_TAB)) {
+                debug("%s: marking parent %d with RULE_TAB for SLS protection\n", __FUNCTION__, tab_parent->id);
+                window_set_rule_flag(tab_parent, WINDOW_RULE_TAB);
+            }
             goto signal;
         }
     }
@@ -741,6 +752,27 @@ static EVENT_HANDLER(WINDOW_MOVED)
         return;
     }
 
+    if (window_check_rule_flag(window, WINDOW_RULE_TAB)) {
+        struct window *tab_parent = window_manager_find_tab_parent(&g_window_manager, window);
+        if (tab_parent) {
+            struct view *view = window_manager_find_managed_window(&g_window_manager, window);
+            if (view) {
+                debug("%s: managed window %d now matches tab parent %d, converting to tab\n", __FUNCTION__, window->id, tab_parent->id);
+                window_set_flag(window, WINDOW_TAB);
+                space_manager_untile_window(view, window);
+                window_manager_remove_managed_window(&g_window_manager, window->id);
+                window_manager_purify_window(&g_window_manager, window);
+            } else {
+                debug("%s: unmanaged window %d matches tab parent %d, marking as tab\n", __FUNCTION__, window->id, tab_parent->id);
+                window_set_flag(window, WINDOW_TAB);
+            }
+            if (!window_check_rule_flag(tab_parent, WINDOW_RULE_TAB)) {
+                window_set_rule_flag(tab_parent, WINDOW_RULE_TAB);
+            }
+            return;
+        }
+    }
+
     if (!windowed_fullscreen) {
         window_clear_flag(window, WINDOW_WINDOWED);
 
@@ -833,6 +865,27 @@ static EVENT_HANDLER(WINDOW_RESIZED)
             }
         }
         return;
+    }
+
+    if (window_check_rule_flag(window, WINDOW_RULE_TAB)) {
+        struct window *tab_parent = window_manager_find_tab_parent(&g_window_manager, window);
+        if (tab_parent) {
+            struct view *view = window_manager_find_managed_window(&g_window_manager, window);
+            if (view) {
+                debug("%s: managed window %d now matches tab parent %d, converting to tab\n", __FUNCTION__, window->id, tab_parent->id);
+                window_set_flag(window, WINDOW_TAB);
+                space_manager_untile_window(view, window);
+                window_manager_remove_managed_window(&g_window_manager, window->id);
+                window_manager_purify_window(&g_window_manager, window);
+            } else {
+                debug("%s: unmanaged window %d matches tab parent %d, marking as tab\n", __FUNCTION__, window->id, tab_parent->id);
+                window_set_flag(window, WINDOW_TAB);
+            }
+            if (!window_check_rule_flag(tab_parent, WINDOW_RULE_TAB)) {
+                window_set_rule_flag(tab_parent, WINDOW_RULE_TAB);
+            }
+            return;
+        }
     }
 
     if (!was_fullscreen && is_fullscreen) {

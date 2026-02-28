@@ -1473,6 +1473,24 @@ struct window *window_manager_find_tab_parent(struct window_manager *wm, struct 
     return NULL;
 }
 
+struct window *window_manager_find_managed_sibling(struct window_manager *wm, struct window *window)
+{
+    uint64_t sid = window_space(window->id);
+
+    int window_count;
+    struct window **window_list = window_manager_find_application_windows(wm, window->application, &window_count);
+
+    for (int i = 0; i < window_count; ++i) {
+        struct window *sibling = window_list[i];
+        if (sibling == window) continue;
+        if (!window_manager_find_managed_window(wm, sibling)) continue;
+        if (sid && window_space(sibling->id) != sid) continue;
+        return sibling;
+    }
+
+    return NULL;
+}
+
 struct window *window_manager_create_and_add_window(struct space_manager *sm, struct window_manager *wm, struct application *application, AXUIElementRef window_ref, uint32_t window_id, bool one_shot_rules)
 {
     struct window *window = window_create(application, window_ref, window_id);

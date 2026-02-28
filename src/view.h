@@ -4,8 +4,8 @@
 #define AX_ABS(a, b) (((a) - (b) < 0) ? (((a) - (b)) * -1) : ((a) - (b)))
 #define AX_DIFF(a, b) (AX_ABS(a, b) >= 1.5f)
 
-#define AX_TAB_POS_TOL 5.0f
-#define AX_TAB_SIZE_TOL 10.0f
+#define AX_TAB_POS_TOL 10.0f
+#define AX_TAB_SIZE_TOL 35.0f
 #define AX_TAB_NEAR(a, b, tol) (AX_ABS(a, b) < tol)
 
 #define SPACE_PROPERTY_LIST \
