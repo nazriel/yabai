@@ -576,6 +576,15 @@ static EVENT_HANDLER(WINDOW_CREATED)
         }
     }
 
+    if (window_check_rule_flag(window, WINDOW_RULE_TAB)) {
+        struct window *tab_parent = window_manager_find_tab_parent(&g_window_manager, window);
+        if (tab_parent) {
+            debug("%s: tab detected for %s %d (parent %d)\n", __FUNCTION__, window->application->name, window->id, tab_parent->id);
+            window_set_flag(window, WINDOW_TAB);
+            goto signal;
+        }
+    }
+
     if (window_manager_should_manage_window(window) && !window_manager_find_managed_window(&g_window_manager, window)) {
         uint64_t sid;
 
@@ -591,6 +600,7 @@ static EVENT_HANDLER(WINDOW_CREATED)
         window_manager_add_managed_window(&g_window_manager, window, view);
     }
 
+signal:
     if (window_manager_is_window_eligible(window)) {
         event_signal_push(SIGNAL_WINDOW_CREATED, window);
     }
@@ -612,8 +622,26 @@ static EVENT_HANDLER(WINDOW_DESTROYED)
 
     struct view *view = window_manager_find_managed_window(&g_window_manager, window);
     if (view) {
+        uint64_t destroyed_sid = view->sid;
         space_manager_untile_window(view, window);
         window_manager_remove_managed_window(&g_window_manager, window->id);
+
+        if (window_check_rule_flag(window, WINDOW_RULE_TAB)) {
+            int sibling_count;
+            struct window **siblings = window_manager_find_application_windows(&g_window_manager, window->application, &sibling_count);
+            for (int i = 0; i < sibling_count; ++i) {
+                struct window *sibling = siblings[i];
+                if (sibling != window && window_check_flag(sibling, WINDOW_TAB) &&
+                    AX_TAB_NEAR(sibling->frame.origin.x, window->frame.origin.x, AX_TAB_POS_TOL) &&
+                    AX_TAB_NEAR(sibling->frame.origin.y, window->frame.origin.y, AX_TAB_POS_TOL)) {
+                    debug("%s: promoting tab %d to replace destroyed %d\n", __FUNCTION__, sibling->id, window->id);
+                    window_clear_flag(sibling, WINDOW_TAB);
+                    struct view *new_view = space_manager_tile_window_on_space(&g_space_manager, sibling, destroyed_sid);
+                    window_manager_add_managed_window(&g_window_manager, sibling, new_view);
+                    break;
+                }
+            }
+        }
     }
 
     if (g_mouse_state.window == window) g_mouse_state.window = NULL;
@@ -699,6 +727,20 @@ static EVENT_HANDLER(WINDOW_MOVED)
     bool windowed_fullscreen = CGRectEqualToRect(window->windowed_frame, window->frame);
     window->frame.origin = new_origin;
 
+    if (window_check_flag(window, WINDOW_TAB)) {
+        struct window *tab_parent = window_manager_find_tab_parent(&g_window_manager, window);
+        if (!tab_parent) {
+            debug("%s: tab %d detached, tiling\n", __FUNCTION__, window->id);
+            window_clear_flag(window, WINDOW_TAB);
+            if (window_manager_should_manage_window(window) && !window_manager_find_managed_window(&g_window_manager, window)) {
+                uint64_t sid = window_space(window->id);
+                struct view *view = space_manager_tile_window_on_space(&g_space_manager, window, sid);
+                window_manager_add_managed_window(&g_window_manager, window, view);
+            }
+        }
+        return;
+    }
+
     if (!windowed_fullscreen) {
         window_clear_flag(window, WINDOW_WINDOWED);
 
@@ -778,6 +820,20 @@ static EVENT_HANDLER(WINDOW_RESIZED)
 
     bool windowed_fullscreen = CGRectEqualToRect(window->windowed_frame, window->frame);
     window->frame = new_frame;
+
+    if (window_check_flag(window, WINDOW_TAB)) {
+        struct window *tab_parent = window_manager_find_tab_parent(&g_window_manager, window);
+        if (!tab_parent) {
+            debug("%s: tab %d detached, tiling\n", __FUNCTION__, window->id);
+            window_clear_flag(window, WINDOW_TAB);
+            if (window_manager_should_manage_window(window) && !window_manager_find_managed_window(&g_window_manager, window)) {
+                uint64_t sid = window_space(window->id);
+                struct view *view = space_manager_tile_window_on_space(&g_space_manager, window, sid);
+                window_manager_add_managed_window(&g_window_manager, window, view);
+            }
+        }
+        return;
+    }
 
     if (!was_fullscreen && is_fullscreen) {
         struct view *view = window_manager_find_managed_window(&g_window_manager, window);

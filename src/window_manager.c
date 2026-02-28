@@ -113,6 +113,9 @@ void window_manager_apply_manage_rule_effects_to_window(struct space_manager *sm
     } else if (effects->manage == RULE_PROP_OFF) {
         window_clear_rule_flag(window, WINDOW_RULE_MANAGED);
         window_manager_make_window_floating(sm, wm, window, true, true);
+    } else if (effects->manage == RULE_PROP_TAB) {
+        window_set_rule_flag(window, WINDOW_RULE_MANAGED);
+        window_set_rule_flag(window, WINDOW_RULE_TAB);
     }
 }
 
@@ -273,6 +276,7 @@ bool window_manager_should_manage_window(struct window *window)
 {
     if (!window->is_root)                           return false;
     if (window_check_flag(window, WINDOW_FLOAT))    return false;
+    if (window_check_flag(window, WINDOW_TAB))      return false;
     if (window_is_sticky(window->id))               return false;
     if (window_check_flag(window, WINDOW_MINIMIZE)) return false;
     if (window->application->is_hidden)             return false;
@@ -1435,6 +1439,40 @@ struct window **window_manager_find_application_windows(struct window_manager *w
     return window_list;
 }
 
+struct window *window_manager_find_tab_parent(struct window_manager *wm, struct window *window)
+{
+    uint64_t sid = window_space(window->id);
+
+    int window_count;
+    struct window **window_list = window_manager_find_application_windows(wm, window->application, &window_count);
+
+    debug("%s: looking for tab parent of %s %d (sid=%lld, frame=%.0f,%.0f %.0fx%.0f, siblings=%d)\n",
+          __FUNCTION__, window->application->name, window->id, sid,
+          window->frame.origin.x, window->frame.origin.y, window->frame.size.width, window->frame.size.height, window_count);
+
+    for (int i = 0; i < window_count; ++i) {
+        struct window *sibling = window_list[i];
+        if (sibling == window) continue;
+        if (!window_manager_find_managed_window(wm, sibling)) continue;
+        if (sid && window_space(sibling->id) != sid) continue;
+
+        if (AX_TAB_NEAR(window->frame.origin.x,    sibling->frame.origin.x,    AX_TAB_POS_TOL)  &&
+            AX_TAB_NEAR(window->frame.origin.y,    sibling->frame.origin.y,    AX_TAB_POS_TOL)  &&
+            AX_TAB_NEAR(window->frame.size.width,  sibling->frame.size.width,  AX_TAB_SIZE_TOL) &&
+            AX_TAB_NEAR(window->frame.size.height, sibling->frame.size.height, AX_TAB_SIZE_TOL)) {
+            debug("%s: found tab parent %d (frame=%.0f,%.0f %.0fx%.0f)\n",
+                  __FUNCTION__, sibling->id, sibling->frame.origin.x, sibling->frame.origin.y, sibling->frame.size.width, sibling->frame.size.height);
+            return sibling;
+        } else {
+            debug("%s: sibling %d frame mismatch (%.0f,%.0f %.0fx%.0f)\n",
+                  __FUNCTION__, sibling->id, sibling->frame.origin.x, sibling->frame.origin.y, sibling->frame.size.width, sibling->frame.size.height);
+        }
+    }
+
+    debug("%s: no tab parent found for %d\n", __FUNCTION__, window->id);
+    return NULL;
+}
+
 struct window *window_manager_create_and_add_window(struct space_manager *sm, struct window_manager *wm, struct application *application, AXUIElementRef window_ref, uint32_t window_id, bool one_shot_rules)
 {
     struct window *window = window_create(application, window_ref, window_id);
@@ -2542,6 +2580,8 @@ static void window_manager_validate_windows_on_space(struct window_manager *wm, 
     int view_window_count;
     uint32_t *view_window_list = view_find_window_list(view, &view_window_count);
 
+    debug("%s: view has %d windows, SLS reports %d windows on space %lld\n", __FUNCTION__, view_window_count, window_count, view->sid);
+
     for (int i = 0; i < view_window_count; ++i) {
         bool found = false;
 
@@ -2554,7 +2594,11 @@ static void window_manager_validate_windows_on_space(struct window_manager *wm, 
 
         if (!found) {
             struct window *window = window_manager_find_window(wm, view_window_list[i]);
-            if (!window) continue;
+            if (!window) { debug("%s: wid %d not found in window table, skipping\n", __FUNCTION__, view_window_list[i]); continue; }
+
+            if (window_check_rule_flag(window, WINDOW_RULE_TAB)) { debug("%s: wid %d (%s) not in SLS list but has RULE_TAB, keeping\n", __FUNCTION__, window->id, window->application->name); continue; }
+
+            debug("%s: REMOVING wid %d (%s) from BSP — not in SLS list\n", __FUNCTION__, window->id, window->application->name);
 
             //
             // @cleanup
@@ -2584,6 +2628,7 @@ static void window_manager_check_for_windows_on_space(struct window_manager *wm,
 
         struct view *existing_view = window_manager_find_managed_window(wm, window);
         if (existing_view && existing_view->layout != VIEW_FLOAT && existing_view != view) {
+            debug("%s: MOVING wid %d (%s) from view %lld to view %lld\n", __FUNCTION__, window->id, window->application->name, existing_view->sid, view->sid);
 
             //
             // @cleanup
@@ -2603,6 +2648,7 @@ static void window_manager_check_for_windows_on_space(struct window_manager *wm,
         }
 
         if (!existing_view || (existing_view->layout != VIEW_FLOAT && existing_view != view)) {
+            debug("%s: ADDING wid %d (%s) to view %lld\n", __FUNCTION__, window->id, window->application->name, view->sid);
 
             //
             // @cleanup
