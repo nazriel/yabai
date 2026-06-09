@@ -15,7 +15,7 @@ static CGFloat status_bar_pill_height(void)
 
 static CGFloat status_bar_pill_horizontal_padding(void)
 {
-    return ceil(status_bar_pill_height() / 2.0f);
+    return 7.5f;
 }
 
 static CGFloat status_bar_pill_gap(void)
