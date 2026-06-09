@@ -257,7 +257,7 @@ Space Settings
     Size of the gap that separates windows for the selected space.
 
 *accordion_padding* ['<integer number>']::
-    Padding used by accordion layouts to reveal windows before and after the active window.
+    Padding used by accordion layouts to reveal each stacked window. Windows are offset by one padding unit per position in the stack, creating a cascading peek effect.
 
 *auto_balance* ['<BOOL_SEL>|x-axis|y-axis']::
     Balance the window tree upon change, so that all windows occupy an equally sized area.

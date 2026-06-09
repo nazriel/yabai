@@ -199,13 +199,8 @@ static struct area area_apply_accordion(enum view_type layout, int accordion_pad
 {
     if (!view_type_is_accordion(layout) || accordion_padding <= 0 || window_count <= 1 || active_index < 0) return area;
 
-    bool before = window_index < active_index;
-    bool after  = window_index > active_index;
-    bool has_before = active_index > 0;
-    bool has_after  = active_index < window_count - 1;
-
-    float leading = (after || (window_index == active_index && has_before)) ? accordion_padding : 0;
-    float trailing = (before || (window_index == active_index && has_after)) ? accordion_padding : 0;
+    float leading = accordion_padding * window_index;
+    float trailing = accordion_padding * (window_count - 1 - window_index);
     float size = layout == VIEW_HORIZONTAL_ACCORDION ? area.w : area.h;
     float total = leading + trailing;
     if (total >= size) {
@@ -248,6 +243,36 @@ static inline bool window_node_is_left_child(struct window_node *node)
 static inline bool window_node_is_right_child(struct window_node *node)
 {
     return node->parent && node->parent->right == node;
+}
+
+static void window_node_order_accordion(struct view *view, struct window_node *node)
+{
+    if (!view || !view_type_is_accordion(view->layout) || node->window_count <= 1) return;
+
+    int active_index = window_node_index_of_window(node, node->window_order[0]);
+    if (active_index < 0) return;
+
+    for (int i = active_index - 1; i >= 0; --i) {
+        scripting_addition_order_window(node->window_list[i], -1, node->window_list[i + 1]);
+    }
+
+    for (int i = active_index + 1; i < node->window_count; ++i) {
+        scripting_addition_order_window(node->window_list[i], -1, node->window_list[i - 1]);
+    }
+}
+
+static void window_node_flush_order_accordion(struct window_node *node)
+{
+    if (window_node_is_leaf(node)) {
+        if (node->window_count > 1) {
+            struct window *window = window_manager_find_window(&g_window_manager, node->window_list[0]);
+            struct view *view = window ? window_manager_find_managed_window(&g_window_manager, window) : NULL;
+            if (view) window_node_order_accordion(view, node);
+        }
+    } else {
+        window_node_flush_order_accordion(node->left);
+        window_node_flush_order_accordion(node->right);
+    }
 }
 
 static void window_node_equalize(struct window_node *node, uint32_t axis_flag)
@@ -406,6 +431,7 @@ void window_node_capture_windows(struct window_node *node, struct window_capture
 
 void window_node_flush(struct window_node *node)
 {
+    window_node_flush_order_accordion(node);
     struct window_capture *window_list = NULL;
     window_node_capture_windows(node, &window_list);
     if (window_list) window_manager_animate_window_list(window_list, ts_buf_len(window_list));
