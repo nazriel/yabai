@@ -195,6 +195,36 @@ static void area_make_pair_for_node(struct view *view, struct window_node *node)
     node->ratio = ratio;
 }
 
+static struct area area_apply_accordion(enum view_type layout, int accordion_padding, struct area area, int window_count, int window_index, int active_index)
+{
+    if (!view_type_is_accordion(layout) || accordion_padding <= 0 || window_count <= 1 || active_index < 0) return area;
+
+    bool before = window_index < active_index;
+    bool after  = window_index > active_index;
+    bool has_before = active_index > 0;
+    bool has_after  = active_index < window_count - 1;
+
+    float leading = (after || (window_index == active_index && has_before)) ? accordion_padding : 0;
+    float trailing = (before || (window_index == active_index && has_after)) ? accordion_padding : 0;
+    float size = layout == VIEW_HORIZONTAL_ACCORDION ? area.w : area.h;
+    float total = leading + trailing;
+    if (total >= size) {
+        float scale = size > 1.0f ? (size - 1.0f) / total : 0.0f;
+        leading *= scale;
+        trailing *= scale;
+    }
+
+    if (layout == VIEW_HORIZONTAL_ACCORDION) {
+        area.x += leading;
+        area.w -= leading + trailing;
+    } else {
+        area.y += leading;
+        area.h -= leading + trailing;
+    }
+
+    return area;
+}
+
 static inline bool window_node_is_occupied(struct window_node *node)
 {
     return node->window_count != 0;
@@ -358,10 +388,13 @@ static void window_node_clear_zoom(struct window_node *node)
 void window_node_capture_windows(struct window_node *node, struct window_capture **window_list)
 {
     if (window_node_is_leaf(node)) {
+        int active_index = window_node_index_of_window(node, node->window_order[0]);
         for (int i = 0; i < node->window_count; ++i) {
             struct window *window = window_manager_find_window(&g_window_manager, node->window_list[i]);
             if (window) {
+                struct view *view = window_manager_find_managed_window(&g_window_manager, window);
                 struct area area = node->zoom ? node->zoom->area : node->area;
+                if (view) area = area_apply_accordion(view->layout, view->accordion_padding, area, node->window_count, i, active_index);
                 ts_buf_push(*window_list, ((struct window_capture) { .window = window, .x = area.x, .y = area.y, .w = area.w, .h = area.h }));
             }
         }
@@ -803,7 +836,7 @@ struct window_node *view_add_window_node_with_insertion_point(struct view *view,
         }
 
         return leaf;
-    } else if (view->layout == VIEW_STACK) {
+    } else if (view->layout == VIEW_STACK || view_type_is_accordion(view->layout)) {
         view_stack_window_node(view->root, window);
         return view->root;
     }
@@ -1004,6 +1037,7 @@ struct view *view_create(uint64_t sid)
         if (!view_check_flag(view, VIEW_LEFT_PADDING))   view->left_padding   = g_space_manager.left_padding;
         if (!view_check_flag(view, VIEW_RIGHT_PADDING))  view->right_padding  = g_space_manager.right_padding;
         if (!view_check_flag(view, VIEW_WINDOW_GAP))     view->window_gap     = g_space_manager.window_gap;
+        if (!view_check_flag(view, VIEW_ACCORDION_PAD))  view->accordion_padding = g_space_manager.accordion_padding;
         if (!view_check_flag(view, VIEW_AUTO_BALANCE))   view->auto_balance   = g_space_manager.auto_balance;
         if (!view_check_flag(view, VIEW_SPLIT_TYPE))     view->split_type     = g_space_manager.split_type;
         view_update(view);

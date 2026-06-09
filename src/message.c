@@ -43,6 +43,7 @@ extern bool g_verbose;
 #define COMMAND_CONFIG_RIGHT_PADDING         "right_padding"
 #define COMMAND_CONFIG_LAYOUT                "layout"
 #define COMMAND_CONFIG_WINDOW_GAP            "window_gap"
+#define COMMAND_CONFIG_ACCORDION_PADDING     "accordion_padding"
 #define COMMAND_CONFIG_SPLIT_RATIO           "split_ratio"
 #define COMMAND_CONFIG_SPLIT_TYPE            "split_type"
 #define COMMAND_CONFIG_AUTO_BALANCE          "auto_balance"
@@ -71,6 +72,9 @@ extern bool g_verbose;
 #define ARGUMENT_CONFIG_SHADOW_FLT            "float"
 #define ARGUMENT_CONFIG_LAYOUT_BSP            "bsp"
 #define ARGUMENT_CONFIG_LAYOUT_STACK          "stack"
+#define ARGUMENT_CONFIG_LAYOUT_HACCORDION     "h_accordion"
+#define ARGUMENT_CONFIG_LAYOUT_VACCORDION     "v_accordion"
+#define ARGUMENT_CONFIG_LAYOUT_ACCORDION      "accordion"
 #define ARGUMENT_CONFIG_LAYOUT_FLOAT          "float"
 #define ARGUMENT_CONFIG_SPLIT_TYPE_Y          "vertical"
 #define ARGUMENT_CONFIG_SPLIT_TYPE_X          "horizontal"
@@ -124,6 +128,9 @@ extern bool g_verbose;
 #define ARGUMENT_SPACE_TGL_SD       "show-desktop"
 #define ARGUMENT_SPACE_LAYOUT_BSP   "bsp"
 #define ARGUMENT_SPACE_LAYOUT_STACK "stack"
+#define ARGUMENT_SPACE_LAYOUT_HACC  "h_accordion"
+#define ARGUMENT_SPACE_LAYOUT_VACC  "v_accordion"
+#define ARGUMENT_SPACE_LAYOUT_ACC   "accordion"
 #define ARGUMENT_SPACE_LAYOUT_FLT   "float"
 /* ----------------------------------------------------------------------------- */
 
@@ -1491,6 +1498,29 @@ static void handle_domain_config(FILE *rsp, struct token domain, char *message)
                     daemon_fail(rsp, "unknown value '%.*s' given to command '%.*s' for domain '%.*s'\n", value.token.length, value.token.text, command.length, command.text, domain.length, domain.text);
                 }
             }
+        } else if (token_equals(command, COMMAND_CONFIG_ACCORDION_PADDING)) {
+            struct token_value value = token_to_value(get_token(&message));
+            if (sel_sid) {
+                struct view *view = space_manager_find_view(&g_space_manager, sel_sid);
+                if (value.type == TOKEN_TYPE_INVALID) {
+                    fprintf(rsp, "%d\n", view->accordion_padding);
+                } else if (value.type == TOKEN_TYPE_INT && value.int_value >= 0) {
+                    view_set_flag(view, VIEW_ACCORDION_PAD);
+                    view->accordion_padding = value.int_value;
+                    view_update(view);
+                    view_flush(view);
+                } else {
+                    daemon_fail(rsp, "unknown value '%.*s' given to command '%.*s' for domain '%.*s'\n", value.token.length, value.token.text, command.length, command.text, domain.length, domain.text);
+                }
+            } else {
+                if (value.type == TOKEN_TYPE_INVALID) {
+                    fprintf(rsp, "%d\n", g_space_manager.accordion_padding);
+                } else if (value.type == TOKEN_TYPE_INT && value.int_value >= 0) {
+                    space_manager_set_accordion_padding_for_all_spaces(&g_space_manager, value.int_value);
+                } else {
+                    daemon_fail(rsp, "unknown value '%.*s' given to command '%.*s' for domain '%.*s'\n", value.token.length, value.token.text, command.length, command.text, domain.length, domain.text);
+                }
+            }
         } else if (token_equals(command, COMMAND_CONFIG_LAYOUT)) {
             struct token value = get_token(&message);
             if (sel_sid) {
@@ -1515,6 +1545,25 @@ static void handle_domain_config(FILE *rsp, struct token domain, char *message)
                     } else {
                         daemon_fail(rsp, "cannot set layout for a macOS fullscreen space!\n");
                     }
+                } else if (token_equals(value, ARGUMENT_CONFIG_LAYOUT_HACCORDION) ||
+                           token_equals(value, ARGUMENT_CONFIG_LAYOUT_ACCORDION)) {
+                    if (space_is_user(sel_sid)) {
+                        view_set_flag(view, VIEW_LAYOUT);
+                        view->layout = VIEW_HORIZONTAL_ACCORDION;
+                        view_clear(view);
+                        window_manager_validate_and_check_for_windows_on_space(&g_space_manager, &g_window_manager, sel_sid);
+                    } else {
+                        daemon_fail(rsp, "cannot set layout for a macOS fullscreen space!\n");
+                    }
+                } else if (token_equals(value, ARGUMENT_CONFIG_LAYOUT_VACCORDION)) {
+                    if (space_is_user(sel_sid)) {
+                        view_set_flag(view, VIEW_LAYOUT);
+                        view->layout = VIEW_VERTICAL_ACCORDION;
+                        view_clear(view);
+                        window_manager_validate_and_check_for_windows_on_space(&g_space_manager, &g_window_manager, sel_sid);
+                    } else {
+                        daemon_fail(rsp, "cannot set layout for a macOS fullscreen space!\n");
+                    }
                 } else if (token_equals(value, ARGUMENT_CONFIG_LAYOUT_FLOAT)) {
                     if (space_is_user(sel_sid)) {
                         view_set_flag(view, VIEW_LAYOUT);
@@ -1533,6 +1582,11 @@ static void handle_domain_config(FILE *rsp, struct token domain, char *message)
                     space_manager_set_layout_for_all_spaces(&g_space_manager, VIEW_BSP);
                 } else if (token_equals(value, ARGUMENT_CONFIG_LAYOUT_STACK)) {
                     space_manager_set_layout_for_all_spaces(&g_space_manager, VIEW_STACK);
+                } else if (token_equals(value, ARGUMENT_CONFIG_LAYOUT_HACCORDION) ||
+                           token_equals(value, ARGUMENT_CONFIG_LAYOUT_ACCORDION)) {
+                    space_manager_set_layout_for_all_spaces(&g_space_manager, VIEW_HORIZONTAL_ACCORDION);
+                } else if (token_equals(value, ARGUMENT_CONFIG_LAYOUT_VACCORDION)) {
+                    space_manager_set_layout_for_all_spaces(&g_space_manager, VIEW_VERTICAL_ACCORDION);
                 } else if (token_equals(value, ARGUMENT_CONFIG_LAYOUT_FLOAT)) {
                     space_manager_set_layout_for_all_spaces(&g_space_manager, VIEW_FLOAT);
                 } else {
@@ -2015,6 +2069,19 @@ static void handle_domain_space(FILE *rsp, struct token domain, char *message)
             } else if (token_equals(value, ARGUMENT_SPACE_LAYOUT_STACK)) {
                 if (space_is_user(acting_sid)) {
                     space_manager_set_layout_for_space(&g_space_manager, acting_sid, VIEW_STACK);
+                } else {
+                    daemon_fail(rsp, "cannot set layout for a macOS fullscreen space!\n");
+                }
+            } else if (token_equals(value, ARGUMENT_SPACE_LAYOUT_HACC) ||
+                       token_equals(value, ARGUMENT_SPACE_LAYOUT_ACC)) {
+                if (space_is_user(acting_sid)) {
+                    space_manager_set_layout_for_space(&g_space_manager, acting_sid, VIEW_HORIZONTAL_ACCORDION);
+                } else {
+                    daemon_fail(rsp, "cannot set layout for a macOS fullscreen space!\n");
+                }
+            } else if (token_equals(value, ARGUMENT_SPACE_LAYOUT_VACC)) {
+                if (space_is_user(acting_sid)) {
+                    space_manager_set_layout_for_space(&g_space_manager, acting_sid, VIEW_VERTICAL_ACCORDION);
                 } else {
                     daemon_fail(rsp, "cannot set layout for a macOS fullscreen space!\n");
                 }

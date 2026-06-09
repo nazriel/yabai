@@ -340,7 +340,7 @@ Action performed when a bsp\-managed window is dropped in the center of some oth
 .RE
 .SS "Space Settings"
 .sp
-\fBlayout\fP [\fIbsp|stack|float\fP]
+\fBlayout\fP [\fIbsp|stack|h_accordion|v_accordion|float\fP]
 .RS 4
 Set the layout of the selected space.
 .RE
@@ -379,6 +379,11 @@ Padding added at the right side of the selected space.
 \fBwindow_gap\fP [\fI<integer number>\fP]
 .RS 4
 Size of the gap that separates windows for the selected space.
+.RE
+.sp
+\fBaccordion_padding\fP [\fI<integer number>\fP]
+.RS 4
+Padding used by accordion layouts to reveal windows before and after the active window.
 .RE
 .sp
 \fBauto_balance\fP [\fI<BOOL_SEL>|x\-axis|y\-axis\fP]
@@ -519,7 +524,7 @@ Size of the gap that separates windows on the selected space.
 Toggle space setting on or off for the selected space.
 .RE
 .sp
-\fB\-\-layout\fP \fIbsp|stack|float\fP
+\fB\-\-layout\fP \fIbsp|stack|h_accordion|v_accordion|float\fP
 .RS 4
 Set the layout of the selected space.
 .RE

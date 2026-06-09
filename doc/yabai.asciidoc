@@ -232,7 +232,7 @@ Global Settings
 Space Settings
 ^^^^^^^^^^^^^^
 
-*layout* ['bsp|stack|float']::
+*layout* ['bsp|stack|h_accordion|v_accordion|float']::
     Set the layout of the selected space.
 
 *split_type* ['vertical|horizontal|auto']::
@@ -255,6 +255,9 @@ Space Settings
 
 *window_gap* ['<integer number>']::
     Size of the gap that separates windows for the selected space.
+
+*accordion_padding* ['<integer number>']::
+    Padding used by accordion layouts to reveal windows before and after the active window.
 
 *auto_balance* ['<BOOL_SEL>|x-axis|y-axis']::
     Balance the window tree upon change, so that all windows occupy an equally sized area.
@@ -351,7 +354,7 @@ COMMAND
 *--toggle* 'padding|gap|mission-control|show-desktop'::
     Toggle space setting on or off for the selected space.
 
-*--layout* 'bsp|stack|float'::
+*--layout* 'bsp|stack|h_accordion|v_accordion|float'::
     Set the layout of the selected space.
 
 *--label* ['<LABEL>']::

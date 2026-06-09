@@ -19,6 +19,7 @@ struct space_manager
     int left_padding;
     int right_padding;
     int window_gap;
+    int accordion_padding;
     float split_ratio;
     enum window_node_split split_type;
     enum window_node_child window_placement;
@@ -82,6 +83,7 @@ void space_manager_set_top_padding_for_all_spaces(struct space_manager *sm, int 
 void space_manager_set_bottom_padding_for_all_spaces(struct space_manager *sm, int bottom_padding);
 void space_manager_set_left_padding_for_all_spaces(struct space_manager *sm, int left_padding);
 void space_manager_set_right_padding_for_all_spaces(struct space_manager *sm, int right_padding);
+void space_manager_set_accordion_padding_for_all_spaces(struct space_manager *sm, int accordion_padding);
 void space_manager_set_split_type_for_all_spaces(struct space_manager *sm, enum window_node_split split_type);
 void space_manager_set_auto_balance_for_all_spaces(struct space_manager *sm, uint32_t auto_balance);
 bool space_manager_set_padding_for_space(struct space_manager *sm, uint64_t sid, int type, int top, int bottom, int left, int right);

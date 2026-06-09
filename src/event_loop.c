@@ -60,13 +60,23 @@ static void window_did_receive_focus(struct window_manager *wm, struct mouse_sta
     struct window_node *node = view_find_window_node(view, window->id);
     if (node->window_count <= 1) return;
 
+    bool did_reorder = false;
     for (int i = 0; i < node->window_count; ++i) {
         if (node->window_order[i] != window->id) continue;
 
         memmove(node->window_order + 1, node->window_order, sizeof(uint32_t) * i);
         node->window_order[0] = window->id;
+        did_reorder = i != 0;
 
         break;
+    }
+
+    if (did_reorder && view_type_is_accordion(view->layout)) {
+        if (space_is_visible(view->sid)) {
+            window_node_flush(node);
+        } else {
+            view_set_flag(view, VIEW_IS_DIRTY);
+        }
     }
 }
 

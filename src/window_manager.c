@@ -994,6 +994,14 @@ struct window *window_manager_find_closest_managed_window_in_direction(struct wi
     struct window_node *node = view_find_window_node(view, window->id);
     if (!node) return NULL;
 
+    if (view->layout == VIEW_HORIZONTAL_ACCORDION) {
+        if (direction == DIR_WEST) return window_manager_find_prev_window_in_stack(&g_space_manager, wm, window);
+        if (direction == DIR_EAST) return window_manager_find_next_window_in_stack(&g_space_manager, wm, window);
+    } else if (view->layout == VIEW_VERTICAL_ACCORDION) {
+        if (direction == DIR_NORTH) return window_manager_find_prev_window_in_stack(&g_space_manager, wm, window);
+        if (direction == DIR_SOUTH) return window_manager_find_next_window_in_stack(&g_space_manager, wm, window);
+    }
+
     struct window_node *closest = view_find_window_node_in_direction(view, node, direction);
     if (!closest) return NULL;
 
@@ -1880,8 +1888,16 @@ enum window_op_error window_manager_stack_window(struct space_manager *sm, struc
     window_manager_adjust_layer(b, LAYER_BELOW);
     scripting_addition_order_window(b->id, 1, a_node->window_order[1]);
 
-    struct area area = a_node->zoom ? a_node->zoom->area : a_node->area;
-    window_manager_animate_window((struct window_capture) { b, area.x, area.y, area.w, area.h });
+    if (view_type_is_accordion(a_view->layout)) {
+        if (space_is_visible(a_view->sid)) {
+            window_node_flush(a_node);
+        } else {
+            view_set_flag(a_view, VIEW_IS_DIRTY);
+        }
+    } else {
+        struct area area = a_node->zoom ? a_node->zoom->area : a_node->area;
+        window_manager_animate_window((struct window_capture) { b, area.x, area.y, area.w, area.h });
+    }
     return WINDOW_OP_ERROR_SUCCESS;
 }
 

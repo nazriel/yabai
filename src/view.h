@@ -175,6 +175,8 @@ enum view_type
     VIEW_DEFAULT,
     VIEW_BSP,
     VIEW_STACK,
+    VIEW_HORIZONTAL_ACCORDION,
+    VIEW_VERTICAL_ACCORDION,
     VIEW_FLOAT
 };
 
@@ -183,8 +185,16 @@ static const char *view_type_str[] =
     "default",
     "bsp",
     "stack",
+    "h_accordion",
+    "v_accordion",
     "float"
 };
+
+static inline bool view_type_is_accordion(enum view_type layout)
+{
+    return layout == VIEW_HORIZONTAL_ACCORDION ||
+           layout == VIEW_VERTICAL_ACCORDION;
+}
 
 enum view_flag
 {
@@ -200,6 +210,7 @@ enum view_flag
     VIEW_IS_VALID       = 0x200,
     VIEW_IS_DIRTY       = 0x400,
     VIEW_SPLIT_TYPE     = 0x800,
+    VIEW_ACCORDION_PAD  = 0x1000,
 };
 
 struct view
@@ -215,6 +226,7 @@ struct view
     int left_padding;
     int right_padding;
     int window_gap;
+    int accordion_padding;
     uint32_t auto_balance;
     uint64_t flags;
 };

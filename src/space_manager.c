@@ -333,6 +333,18 @@ void space_manager_set_right_padding_for_all_spaces(struct space_manager *sm, in
     })
 }
 
+void space_manager_set_accordion_padding_for_all_spaces(struct space_manager *sm, int accordion_padding)
+{
+    sm->accordion_padding = accordion_padding;
+    table_for (struct view *view, sm->view, {
+        if (!view_check_flag(view, VIEW_ACCORDION_PAD)) {
+            view->accordion_padding = accordion_padding;
+            view_update(view);
+            view_flush(view);
+        }
+    })
+}
+
 void space_manager_set_split_type_for_all_spaces(struct space_manager *sm, enum window_node_split split_type)
 {
     sm->split_type = split_type;
@@ -1202,6 +1214,7 @@ void space_manager_handle_display_add(struct space_manager *sm, uint32_t did)
 void space_manager_begin(struct space_manager *sm)
 {
     sm->layout = VIEW_FLOAT;
+    sm->accordion_padding = 30;
     sm->split_ratio = 0.5f;
     sm->auto_balance = SPLIT_NONE;
     sm->split_type = SPLIT_AUTO;
