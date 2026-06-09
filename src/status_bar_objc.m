@@ -6,6 +6,24 @@ extern char g_config_file[4096];
 
 @implementation status_bar_pill_view
 
+static bool status_bar_is_dark_appearance(NSAppearance *appearance)
+{
+    if (!appearance) appearance = [NSAppearance currentDrawingAppearance];
+
+    NSAppearanceName match = [appearance bestMatchFromAppearancesWithNames:@[
+        NSAppearanceNameAqua,
+        NSAppearanceNameDarkAqua,
+        NSAppearanceNameVibrantLight,
+        NSAppearanceNameVibrantDark,
+        NSAppearanceNameAccessibilityHighContrastAqua,
+        NSAppearanceNameAccessibilityHighContrastDarkAqua,
+        NSAppearanceNameAccessibilityHighContrastVibrantLight,
+        NSAppearanceNameAccessibilityHighContrastVibrantDark
+    ]];
+
+    return [match containsString:@"Dark"];
+}
+
 - (BOOL)isFlipped
 {
     return YES;
@@ -21,14 +39,18 @@ extern char g_config_file[4096];
                                                          xRadius:radius
                                                          yRadius:radius];
 
-    [[NSColor blackColor] setFill];
+    bool is_dark = status_bar_is_dark_appearance([self effectiveAppearance]);
+    NSColor *fill_color = is_dark ? [NSColor whiteColor] : [NSColor blackColor];
+    NSColor *text_color = is_dark ? [NSColor blackColor] : [NSColor whiteColor];
+
+    [fill_color setFill];
     [path fill];
 
     if (!self.title.length) return;
 
     NSDictionary *attributes = @{
         NSFontAttributeName: [NSFont systemFontOfSize:11.0 weight:NSFontWeightMedium],
-        NSForegroundColorAttributeName: [NSColor whiteColor]
+        NSForegroundColorAttributeName: text_color
     };
 
     NSSize text_size = [self.title sizeWithAttributes:attributes];
@@ -53,6 +75,12 @@ extern char g_config_file[4096];
 {
     _title = [title copy];
     [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay:YES];
+}
+
+- (void)viewDidChangeEffectiveAppearance
+{
+    [super viewDidChangeEffectiveAppearance];
     [self setNeedsDisplay:YES];
 }
 
