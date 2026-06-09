@@ -10,12 +10,14 @@ struct status_bar_space_info {
     bool is_active;
     char label[STATUS_BAR_SPACE_LABEL_LEN];
     char windows[STATUS_BAR_SPACE_WINDOWS_LEN];
-    char menu_title[512];
+    char menu_primary[128];
+    char menu_secondary[STATUS_BAR_SPACE_WINDOWS_LEN];
 };
 
 struct status_bar_snapshot {
     char title[128];
     char version[64];
+    char clipboard[4096];
     struct status_bar_space_info *spaces;
     int space_count;
 };
@@ -24,6 +26,7 @@ bool status_bar_begin(void);
 void status_bar_refresh(void);
 void status_bar_focus_space(uint64_t sid);
 void status_bar_reload_config(void);
+void status_bar_open_config(void);
 bool status_bar_collect_snapshot(struct status_bar_snapshot *snapshot);
 void status_bar_free_snapshot(struct status_bar_snapshot *snapshot);
 

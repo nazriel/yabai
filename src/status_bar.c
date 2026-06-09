@@ -13,7 +13,7 @@ static void status_bar_format_title(char *buffer, size_t length, uint64_t sid)
     struct space_label *label = space_manager_get_label_for_space(&g_space_manager, sid);
 
     if (label && label->label && label->label[0] != '\0') {
-        snprintf(buffer, length, "%d.%s", index, label->label);
+        snprintf(buffer, length, "%d. %s", index, label->label);
     } else {
         snprintf(buffer, length, "%d", index);
     }
@@ -57,16 +57,49 @@ static void status_bar_collect_window_apps(uint64_t sid, char *buffer, size_t le
     }
 }
 
-static void status_bar_format_menu_title(struct status_bar_space_info *info, char *buffer, size_t length)
+static void status_bar_format_menu_parts(struct status_bar_space_info *info)
 {
-    if (info->label[0] != '\0' && info->windows[0] != '\0') {
-        snprintf(buffer, length, "%d.%s - %s", info->index, info->label, info->windows);
-    } else if (info->label[0] != '\0') {
-        snprintf(buffer, length, "%d.%s", info->index, info->label);
-    } else if (info->windows[0] != '\0') {
-        snprintf(buffer, length, "%d - %s", info->index, info->windows);
+    if (info->label[0] != '\0') {
+        snprintf(info->menu_primary, sizeof(info->menu_primary), "%d. %s", info->index, info->label);
     } else {
-        snprintf(buffer, length, "%d", info->index);
+        snprintf(info->menu_primary, sizeof(info->menu_primary), "%d", info->index);
+    }
+
+    snprintf(info->menu_secondary, sizeof(info->menu_secondary), "%s", info->windows);
+}
+
+static void status_bar_format_clipboard(struct status_bar_snapshot *snapshot)
+{
+    size_t offset = 0;
+
+    int written = snprintf(snapshot->clipboard + offset,
+                           sizeof(snapshot->clipboard) - offset,
+                           "%s\n\nWorkspaces:\n",
+                           snapshot->version);
+    if (written < 0) return;
+    offset += (size_t) written;
+
+    for (int i = 0; i < snapshot->space_count; ++i) {
+        struct status_bar_space_info *info = &snapshot->spaces[i];
+        char line[512];
+
+        if (info->menu_secondary[0] != '\0') {
+            snprintf(line, sizeof(line), "%s%s - %s",
+                     info->is_active ? "✓ " : "  ",
+                     info->menu_primary,
+                     info->menu_secondary);
+        } else {
+            snprintf(line, sizeof(line), "%s%s",
+                     info->is_active ? "✓ " : "  ",
+                     info->menu_primary);
+        }
+
+        written = snprintf(snapshot->clipboard + offset,
+                           sizeof(snapshot->clipboard) - offset,
+                           "%s\n",
+                           line);
+        if (written < 0 || (size_t) written >= sizeof(snapshot->clipboard) - offset) break;
+        offset += (size_t) written;
     }
 }
 
@@ -123,10 +156,11 @@ bool status_bar_collect_snapshot(struct status_bar_snapshot *snapshot)
             }
 
             status_bar_collect_window_apps(sid, info->windows, sizeof(info->windows));
-            status_bar_format_menu_title(info, info->menu_title, sizeof(info->menu_title));
+            status_bar_format_menu_parts(info);
         }
     }
 
+    status_bar_format_clipboard(snapshot);
     return true;
 }
 
@@ -147,4 +181,20 @@ void status_bar_focus_space(uint64_t sid)
 void status_bar_reload_config(void)
 {
     exec_config_file(g_config_file, sizeof(g_config_file));
+}
+
+void status_bar_open_config(void)
+{
+    char config_path[sizeof(g_config_file)];
+
+    if (g_config_file[0] != '\0') {
+        snprintf(config_path, sizeof(config_path), "%s", g_config_file);
+    } else if (!get_config_file("yabairc", config_path, sizeof(config_path))) {
+        return;
+    }
+
+    if (!file_exists(config_path)) return;
+
+    char *args[] = { "/usr/bin/open", config_path, NULL };
+    posix_spawn(NULL, args[0], NULL, NULL, args, NULL);
 }
