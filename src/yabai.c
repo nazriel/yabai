@@ -347,6 +347,10 @@ int main(int argc, char **argv)
 
     exec_config_file(g_config_file, sizeof(g_config_file));
 
+    if (!status_bar_begin()) {
+        warn("yabai: could not create status bar item..\n");
+    }
+
     [NSApp run];
 
     return 0;
