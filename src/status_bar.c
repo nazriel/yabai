@@ -19,6 +19,76 @@ static void status_bar_format_title(char *buffer, size_t length, uint64_t sid)
     }
 }
 
+static int status_bar_compare_display_order(const void *lhs, const void *rhs)
+{
+    uint32_t lhs_did = *(const uint32_t *) lhs;
+    uint32_t rhs_did = *(const uint32_t *) rhs;
+
+    int lhs_order = display_manager_display_id_arrangement(lhs_did);
+    int rhs_order = display_manager_display_id_arrangement(rhs_did);
+
+    if (lhs_order && rhs_order && lhs_order != rhs_order) {
+        return lhs_order < rhs_order ? -1 : 1;
+    }
+
+    if (lhs_order != rhs_order) return lhs_order ? -1 : 1;
+    if (lhs_did == rhs_did) return 0;
+    return lhs_did < rhs_did ? -1 : 1;
+}
+
+static bool status_bar_append_pill(struct status_bar_snapshot *snapshot, int *capacity, uint32_t did, uint64_t sid, uint64_t active_sid)
+{
+    if (snapshot->pill_count == *capacity) {
+        int new_capacity = *capacity ? *capacity * 2 : 4;
+        struct status_bar_pill_info *pills = realloc(snapshot->pills,
+                                                     sizeof(struct status_bar_pill_info) * new_capacity);
+        if (!pills) return false;
+
+        snapshot->pills = pills;
+        *capacity = new_capacity;
+    }
+
+    struct status_bar_pill_info *pill = &snapshot->pills[snapshot->pill_count++];
+    memset(pill, 0, sizeof(*pill));
+
+    pill->did = did;
+    pill->sid = sid;
+    pill->is_active = sid == active_sid;
+    status_bar_format_title(pill->title, sizeof(pill->title), sid);
+    return true;
+}
+
+static bool status_bar_collect_pills(struct status_bar_snapshot *snapshot, uint32_t *display_list, int display_count, uint64_t active_sid)
+{
+    if (!display_list || display_count <= 0) return true;
+
+    uint32_t *ordered_displays = malloc(sizeof(uint32_t) * display_count);
+    if (ordered_displays) {
+        memcpy(ordered_displays, display_list, sizeof(uint32_t) * display_count);
+        if (display_count > 1) {
+            qsort(ordered_displays, display_count, sizeof(uint32_t), status_bar_compare_display_order);
+        }
+    } else {
+        ordered_displays = display_list;
+    }
+
+    int pill_capacity = 0;
+
+    for (int i = 0; i < display_count; ++i) {
+        uint32_t did = ordered_displays[i];
+        uint64_t sid = display_space_id(did);
+        if (!sid) continue;
+
+        if (!status_bar_append_pill(snapshot, &pill_capacity, did, sid, active_sid)) {
+            if (ordered_displays != display_list) free(ordered_displays);
+            return false;
+        }
+    }
+
+    if (ordered_displays != display_list) free(ordered_displays);
+    return true;
+}
+
 static void status_bar_collect_window_apps(uint64_t sid, char *buffer, size_t length)
 {
     int window_count = 0;
@@ -123,6 +193,11 @@ bool status_bar_collect_snapshot(struct status_bar_snapshot *snapshot)
     uint32_t *display_list = display_manager_active_display_list(&display_count);
     if (!display_list) return true;
 
+    if (!status_bar_collect_pills(snapshot, display_list, display_count, active_sid)) {
+        status_bar_free_snapshot(snapshot);
+        return false;
+    }
+
     int capacity = 0;
 
     for (int i = 0; i < display_count; ++i) {
@@ -135,12 +210,16 @@ bool status_bar_collect_snapshot(struct status_bar_snapshot *snapshot)
             if (!space_is_user(sid)) continue;
 
             if (snapshot->space_count == capacity) {
-                capacity = capacity ? capacity * 2 : 8;
-                snapshot->spaces = realloc(snapshot->spaces, sizeof(struct status_bar_space_info) * capacity);
-                if (!snapshot->spaces) {
-                    snapshot->space_count = 0;
+                int new_capacity = capacity ? capacity * 2 : 8;
+                struct status_bar_space_info *spaces = realloc(snapshot->spaces,
+                                                               sizeof(struct status_bar_space_info) * new_capacity);
+                if (!spaces) {
+                    status_bar_free_snapshot(snapshot);
                     return false;
                 }
+
+                snapshot->spaces = spaces;
+                capacity = new_capacity;
             }
 
             struct status_bar_space_info *info = &snapshot->spaces[snapshot->space_count++];
@@ -167,6 +246,10 @@ bool status_bar_collect_snapshot(struct status_bar_snapshot *snapshot)
 void status_bar_free_snapshot(struct status_bar_snapshot *snapshot)
 {
     if (!snapshot) return;
+
+    free(snapshot->pills);
+    snapshot->pills = NULL;
+    snapshot->pill_count = 0;
 
     free(snapshot->spaces);
     snapshot->spaces = NULL;

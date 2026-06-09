@@ -1,7 +1,8 @@
 extern char g_config_file[4096];
 
 @interface status_bar_pill_view : NSView
-@property (copy, nonatomic) NSString *title;
+@property (copy, nonatomic) NSArray *titles;
+@property (assign, nonatomic) NSInteger active_index;
 @end
 
 @implementation status_bar_pill_view
@@ -15,6 +16,16 @@ static CGFloat status_bar_pill_height(void)
 static CGFloat status_bar_pill_horizontal_padding(void)
 {
     return ceil(status_bar_pill_height() / 2.0f);
+}
+
+static CGFloat status_bar_pill_gap(void)
+{
+    return 4.0f;
+}
+
+static NSFont *status_bar_pill_font(void)
+{
+    return [NSFont systemFontOfSize:11.0 weight:NSFontWeightMedium];
 }
 
 static bool status_bar_is_dark_appearance(NSAppearance *appearance)
@@ -35,6 +46,25 @@ static bool status_bar_is_dark_appearance(NSAppearance *appearance)
     return [match containsString:@"Dark"];
 }
 
+static NSString *status_bar_pill_title_at_index(NSArray *titles, NSUInteger index)
+{
+    id title = [titles objectAtIndex:index];
+    return [title isKindOfClass:[NSString class]] ? title : @"";
+}
+
+static CGFloat status_bar_pill_width_for_title(NSString *title)
+{
+    CGFloat horizontal_padding = status_bar_pill_horizontal_padding();
+    if (!title.length) return horizontal_padding * 2.0f;
+
+    NSDictionary *attributes = @{
+        NSFontAttributeName: status_bar_pill_font()
+    };
+
+    NSSize text_size = [title sizeWithAttributes:attributes];
+    return ceil(text_size.width + horizontal_padding * 2.0f);
+}
+
 - (BOOL)isFlipped
 {
     return YES;
@@ -44,50 +74,98 @@ static bool status_bar_is_dark_appearance(NSAppearance *appearance)
 {
     (void) dirtyRect;
 
+    NSArray *titles = self.titles;
+    NSUInteger title_count = [titles count];
+    if (!title_count) titles = @[@""];
+
     NSRect bounds = self.bounds;
     CGFloat radius = 5.0f;
-    NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(bounds, 0.5f, 0.5f)
-                                                         xRadius:radius
-                                                         yRadius:radius];
+    CGFloat x = 0.0f;
 
     bool is_dark = status_bar_is_dark_appearance([self effectiveAppearance]);
-    NSColor *fill_color = is_dark ? [NSColor whiteColor] : [NSColor blackColor];
-    NSColor *text_color = is_dark ? [NSColor blackColor] : [NSColor whiteColor];
+    NSColor *highlight_color = is_dark ? [NSColor whiteColor] : [NSColor blackColor];
+    NSColor *highlight_text_color = is_dark ? [NSColor blackColor] : [NSColor whiteColor];
+    NSColor *inactive_text_color = highlight_color;
 
-    [fill_color setFill];
-    [path fill];
+    title_count = [titles count];
+    for (NSUInteger i = 0; i < title_count; ++i) {
+        NSString *title = status_bar_pill_title_at_index(titles, i);
+        CGFloat width = status_bar_pill_width_for_title(title);
+        NSRect pill_rect = NSMakeRect(x, 0.0f, width, bounds.size.height);
+        NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(pill_rect, 0.5f, 0.5f)
+                                                             xRadius:radius
+                                                             yRadius:radius];
+        bool is_active = (NSInteger) i == self.active_index;
+        NSColor *text_color = is_active ? highlight_text_color : inactive_text_color;
 
-    if (!self.title.length) return;
+        if (is_active) {
+            [highlight_color setFill];
+            [path fill];
+        } else {
+            [highlight_color setStroke];
+            [path setLineWidth:1.0f];
+            [path stroke];
+        }
 
-    NSDictionary *attributes = @{
-        NSFontAttributeName: [NSFont systemFontOfSize:11.0 weight:NSFontWeightMedium],
-        NSForegroundColorAttributeName: text_color
-    };
+        if (title.length) {
+            NSDictionary *attributes = @{
+                NSFontAttributeName: status_bar_pill_font(),
+                NSForegroundColorAttributeName: text_color
+            };
+            NSSize text_size = [title sizeWithAttributes:attributes];
+            NSPoint origin = NSMakePoint(pill_rect.origin.x + (pill_rect.size.width - text_size.width) / 2.0f,
+                                         pill_rect.origin.y + (pill_rect.size.height - text_size.height) / 2.0f);
+            [title drawAtPoint:origin withAttributes:attributes];
+        }
 
-    NSSize text_size = [self.title sizeWithAttributes:attributes];
-    NSPoint origin = NSMakePoint((bounds.size.width - text_size.width) / 2.0f,
-                                 (bounds.size.height - text_size.height) / 2.0f);
-    [self.title drawAtPoint:origin withAttributes:attributes];
+        x += width + status_bar_pill_gap();
+    }
 }
 
 - (NSSize)intrinsicContentSize
 {
+    NSArray *titles = self.titles;
+    NSUInteger title_count = [titles count];
     CGFloat height = status_bar_pill_height();
-    CGFloat horizontal_padding = status_bar_pill_horizontal_padding();
-    if (!self.title.length) return NSMakeSize(horizontal_padding * 2.0f, height);
+    CGFloat width = 0.0f;
+
+    if (!title_count) {
+        return NSMakeSize(status_bar_pill_width_for_title(@""), height);
+    }
 
     NSDictionary *attributes = @{
-        NSFontAttributeName: [NSFont systemFontOfSize:11.0 weight:NSFontWeightMedium]
+        NSFontAttributeName: status_bar_pill_font()
     };
 
-    NSSize text_size = [self.title sizeWithAttributes:attributes];
-    return NSMakeSize(text_size.width + horizontal_padding * 2.0f, MAX(text_size.height + 4.0f, height));
+    for (NSUInteger i = 0; i < title_count; ++i) {
+        NSString *title = status_bar_pill_title_at_index(titles, i);
+        width += status_bar_pill_width_for_title(title);
+
+        if (title.length) {
+            NSSize text_size = [title sizeWithAttributes:attributes];
+            height = MAX(height, text_size.height + 4.0f);
+        }
+
+        if (i < title_count - 1) width += status_bar_pill_gap();
+    }
+
+    return NSMakeSize(ceil(width), height);
 }
 
-- (void)setTitle:(NSString *)title
+- (void)setTitles:(NSArray *)titles
 {
-    _title = [title copy];
+    if (_titles != titles) {
+        [_titles release];
+        _titles = [titles copy];
+    }
+
     [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay:YES];
+}
+
+- (void)setActive_index:(NSInteger)active_index
+{
+    _active_index = active_index;
     [self setNeedsDisplay:YES];
 }
 
@@ -95,6 +173,12 @@ static bool status_bar_is_dark_appearance(NSAppearance *appearance)
 {
     [super viewDidChangeEffectiveAppearance];
     [self setNeedsDisplay:YES];
+}
+
+- (void)dealloc
+{
+    [_titles release];
+    [super dealloc];
 }
 
 @end
@@ -189,6 +273,14 @@ static NSMenuItem *status_bar_disabled_item(NSString *title)
     return item;
 }
 
+static NSString *status_bar_string_from_c(const char *string)
+{
+    if (!string) return @"";
+
+    NSString *result = [NSString stringWithUTF8String:string];
+    return result ? result : @"";
+}
+
 static NSString *status_bar_config_editor_name(void)
 {
     char config_path[4096];
@@ -216,8 +308,22 @@ static void status_bar_refresh_main(void)
     struct status_bar_snapshot snapshot = {0};
     if (!status_bar_collect_snapshot(&snapshot)) return;
 
-    NSString *title = [NSString stringWithUTF8String:snapshot.title];
-    [g_pill_view setTitle:title];
+    NSMutableArray *pill_titles = [NSMutableArray arrayWithCapacity:snapshot.pill_count > 0 ? snapshot.pill_count : 1];
+    NSInteger active_index = -1;
+    if (snapshot.pill_count > 0) {
+        for (int i = 0; i < snapshot.pill_count; ++i) {
+            [pill_titles addObject:status_bar_string_from_c(snapshot.pills[i].title)];
+            if (snapshot.pills[i].is_active) active_index = i;
+        }
+    } else {
+        [pill_titles addObject:status_bar_string_from_c(snapshot.title)];
+        active_index = 0;
+    }
+
+    if (active_index < 0 && [pill_titles count] == 1) active_index = 0;
+
+    [g_pill_view setTitles:pill_titles];
+    [g_pill_view setActive_index:active_index];
 
     NSStatusBarButton *button = [g_status_item button];
     NSSize pill_size = [g_pill_view intrinsicContentSize];

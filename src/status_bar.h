@@ -3,6 +3,14 @@
 
 #define STATUS_BAR_SPACE_LABEL_LEN   64
 #define STATUS_BAR_SPACE_WINDOWS_LEN 256
+#define STATUS_BAR_PILL_TITLE_LEN    128
+
+struct status_bar_pill_info {
+    uint32_t did;
+    uint64_t sid;
+    bool is_active;
+    char title[STATUS_BAR_PILL_TITLE_LEN];
+};
 
 struct status_bar_space_info {
     int index;
@@ -18,6 +26,8 @@ struct status_bar_snapshot {
     char title[128];
     char version[64];
     char clipboard[4096];
+    struct status_bar_pill_info *pills;
+    int pill_count;
     struct status_bar_space_info *spaces;
     int space_count;
 };
