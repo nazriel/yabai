@@ -6,6 +6,17 @@ extern char g_config_file[4096];
 
 @implementation status_bar_pill_view
 
+static CGFloat status_bar_pill_height(void)
+{
+    CGFloat height = [[NSStatusBar systemStatusBar] thickness];
+    return height > 0.0f ? height : 22.0f;
+}
+
+static CGFloat status_bar_pill_horizontal_padding(void)
+{
+    return ceil(status_bar_pill_height() / 2.0f);
+}
+
 static bool status_bar_is_dark_appearance(NSAppearance *appearance)
 {
     if (!appearance) appearance = [NSAppearance currentDrawingAppearance];
@@ -61,14 +72,16 @@ static bool status_bar_is_dark_appearance(NSAppearance *appearance)
 
 - (NSSize)intrinsicContentSize
 {
-    if (!self.title.length) return NSMakeSize(24.0f, 18.0f);
+    CGFloat height = status_bar_pill_height();
+    CGFloat horizontal_padding = status_bar_pill_horizontal_padding();
+    if (!self.title.length) return NSMakeSize(horizontal_padding * 2.0f, height);
 
     NSDictionary *attributes = @{
         NSFontAttributeName: [NSFont systemFontOfSize:11.0 weight:NSFontWeightMedium]
     };
 
     NSSize text_size = [self.title sizeWithAttributes:attributes];
-    return NSMakeSize(text_size.width + 12.0f, MAX(text_size.height + 4.0f, 18.0f));
+    return NSMakeSize(text_size.width + horizontal_padding * 2.0f, MAX(text_size.height + 4.0f, height));
 }
 
 - (void)setTitle:(NSString *)title
@@ -277,7 +290,7 @@ bool status_bar_begin(void)
     g_status_item = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
     if (!g_status_item) return false;
 
-    g_pill_view = [[status_bar_pill_view alloc] initWithFrame:NSMakeRect(0.0f, 0.0f, 24.0f, 18.0f)];
+    g_pill_view = [[status_bar_pill_view alloc] initWithFrame:NSMakeRect(0.0f, 0.0f, 24.0f, status_bar_pill_height())];
 
     NSStatusBarButton *button = [g_status_item button];
     [button setTitle:@""];
