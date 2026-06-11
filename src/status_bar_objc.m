@@ -301,22 +301,19 @@ static NSString *status_bar_config_editor_name(void)
     return app_name;
 }
 
-static void status_bar_refresh_main(void)
+static void status_bar_apply_snapshot(struct status_bar_snapshot *snapshot)
 {
     if (!g_status_bar_enabled || !g_status_item || !g_pill_view) return;
 
-    struct status_bar_snapshot snapshot = {0};
-    if (!status_bar_collect_snapshot(&snapshot)) return;
-
-    NSMutableArray *pill_titles = [NSMutableArray arrayWithCapacity:snapshot.pill_count > 0 ? snapshot.pill_count : 1];
+    NSMutableArray *pill_titles = [NSMutableArray arrayWithCapacity:snapshot->pill_count > 0 ? snapshot->pill_count : 1];
     NSInteger active_index = -1;
-    if (snapshot.pill_count > 0) {
-        for (int i = 0; i < snapshot.pill_count; ++i) {
-            [pill_titles addObject:status_bar_string_from_c(snapshot.pills[i].title)];
-            if (snapshot.pills[i].is_active) active_index = i;
+    if (snapshot->pill_count > 0) {
+        for (int i = 0; i < snapshot->pill_count; ++i) {
+            [pill_titles addObject:status_bar_string_from_c(snapshot->pills[i].title)];
+            if (snapshot->pills[i].is_active) active_index = i;
         }
     } else {
-        [pill_titles addObject:status_bar_string_from_c(snapshot.title)];
+        [pill_titles addObject:status_bar_string_from_c(snapshot->title)];
         active_index = 0;
     }
 
@@ -331,11 +328,11 @@ static void status_bar_refresh_main(void)
     [button setFrameSize:pill_size];
     [g_status_item setLength:pill_size.width];
 
-    g_status_delegate.clipboard_text = [NSString stringWithUTF8String:snapshot.clipboard];
+    g_status_delegate.clipboard_text = status_bar_string_from_c(snapshot->clipboard);
 
     NSMenu *menu = [[NSMenu alloc] init];
 
-    NSMenuItem *version_item = status_bar_disabled_item([NSString stringWithUTF8String:snapshot.version]);
+    NSMenuItem *version_item = status_bar_disabled_item(status_bar_string_from_c(snapshot->version));
     [menu addItem:version_item];
     [menu addItem:[NSMenuItem separatorItem]];
 
@@ -348,8 +345,8 @@ static void status_bar_refresh_main(void)
 
     [menu addItem:status_bar_disabled_item(@"Workspaces:")];
 
-    for (int i = 0; i < snapshot.space_count; ++i) {
-        struct status_bar_space_info *info = &snapshot.spaces[i];
+    for (int i = 0; i < snapshot->space_count; ++i) {
+        struct status_bar_space_info *info = &snapshot->spaces[i];
 
         NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:@""
                                                       action:@selector(focusSpace:)
@@ -357,8 +354,8 @@ static void status_bar_refresh_main(void)
         [item setTarget:g_status_delegate];
         [item setRepresentedObject:[NSNumber numberWithUnsignedLongLong:info->sid]];
         [item setAttributedTitle:status_bar_attributed_workspace(
-            [NSString stringWithUTF8String:info->menu_primary],
-            [NSString stringWithUTF8String:info->menu_secondary])];
+            status_bar_string_from_c(info->menu_primary),
+            status_bar_string_from_c(info->menu_secondary))];
         [item setState:info->is_active ? NSControlStateValueOn : NSControlStateValueOff];
         [menu addItem:item];
     }
@@ -385,7 +382,6 @@ static void status_bar_refresh_main(void)
     [menu addItem:quit_item];
 
     [g_status_item setMenu:menu];
-    status_bar_free_snapshot(&snapshot);
 }
 
 bool status_bar_begin(void)
@@ -404,15 +400,43 @@ bool status_bar_begin(void)
     [button addSubview:g_pill_view];
 
     g_status_bar_enabled = true;
-    status_bar_refresh_main();
+    status_bar_refresh();
     return true;
 }
+
+// NOTE(status_bar): Snapshot collection reads the space/window/display state
+// and uses the temporary storage allocator, both of which are owned by the
+// event loop thread. Refresh requests are therefore funneled through the
+// event loop (status_bar_handle_refresh), and only the resulting immutable
+// snapshot is handed to the main thread for the AppKit work.
+static volatile bool g_status_bar_refresh_pending;
 
 void status_bar_refresh(void)
 {
     if (!g_status_bar_enabled) return;
 
+    if (__sync_bool_compare_and_swap(&g_status_bar_refresh_pending, false, true)) {
+        event_loop_post(&g_event_loop, STATUS_BAR_REFRESH, NULL, 0);
+    }
+}
+
+void status_bar_handle_refresh(void)
+{
+    __atomic_store_n(&g_status_bar_refresh_pending, false, __ATOMIC_RELEASE);
+
+    if (!g_status_bar_enabled) return;
+
+    struct status_bar_snapshot *snapshot = malloc(sizeof(struct status_bar_snapshot));
+    if (!snapshot) return;
+
+    if (!status_bar_collect_snapshot(snapshot)) {
+        free(snapshot);
+        return;
+    }
+
     dispatch_async(dispatch_get_main_queue(), ^{
-        status_bar_refresh_main();
+        status_bar_apply_snapshot(snapshot);
+        status_bar_free_snapshot(snapshot);
+        free(snapshot);
     });
 }

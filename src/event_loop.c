@@ -1744,6 +1744,11 @@ static EVENT_HANDLER(STATUS_BAR_FOCUS_SPACE)
     space_manager_focus_space(sid);
 }
 
+static EVENT_HANDLER(STATUS_BAR_REFRESH)
+{
+    status_bar_handle_refresh();
+}
+
 static EVENT_HANDLER(DAEMON_MESSAGE)
 {
     TIME_FUNCTION;

@@ -34,6 +34,7 @@ struct status_bar_snapshot {
 
 bool status_bar_begin(void);
 void status_bar_refresh(void);
+void status_bar_handle_refresh(void);
 void status_bar_focus_space(uint64_t sid);
 void status_bar_reload_config(void);
 void status_bar_open_config(void);
